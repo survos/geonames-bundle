@@ -1,0 +1,37 @@
+{
+    "name": "survos/geonames-bundle",
+    "description": "Symfony bundle for fetching packaged GeoNames authority databases.",
+    "keywords": [
+        "symfony",
+        "geonames",
+        "authority",
+        "sqlite"
+    ],
+    "license": "MIT",
+    "type": "symfony-bundle",
+    "require": {
+        "php": "^8.4",
+        "symfony/config": "^7.4||^8.0",
+        "symfony/console": "^7.4||^8.0",
+        "symfony/dependency-injection": "^7.4||^8.0",
+        "symfony/filesystem": "^7.4||^8.0",
+        "symfony/http-client": "^7.4||^8.0",
+        "symfony/http-kernel": "^7.4||^8.0",
+        "zenstruck/bytes": "^1.1"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^13",
+        "symfony/framework-bundle": "^7.4||^8.0",
+        "symfony/phpunit-bridge": "^7.4||^8.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "Survos\\GeonamesBundle\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Survos\\GeonamesBundle\\Tests\\": "tests/"
+        }
+    }
+}
