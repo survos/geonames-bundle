@@ -27,12 +27,8 @@
         "symfony/phpunit-bridge": "^7.4||^8.0"
     },
     "autoload": {
-        "files": [
-            "admin/src/functions.php"
-        ],
         "psr-4": {
-            "Survos\\GeonamesBundle\\": "src/",
-            "Survos\\GeonamesAdmin\\": "admin/src/"
+            "Survos\\GeonamesBundle\\": "src/"
         }
     },
     "autoload-dev": {
