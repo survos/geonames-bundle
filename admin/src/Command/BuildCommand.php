@@ -5,10 +5,9 @@ declare(strict_types=1);
 namespace Survos\GeonamesAdmin\Command;
 
 use Survos\GeonamesAdmin\AdminConfig;
+use Symfony\Component\Console\Attribute\AsCommand;
+use Symfony\Component\Console\Attribute\Option;
 use Symfony\Component\Console\Command\Command;
-use Symfony\Component\Console\Input\InputInterface;
-use Symfony\Component\Console\Input\InputOption;
-use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
 use Symfony\Component\Filesystem\Filesystem;
 
@@ -21,37 +20,31 @@ use function Survos\GeonamesAdmin\generatedSqliteFiles;
 use function Survos\GeonamesAdmin\refreshMetadata;
 use function Survos\GeonamesAdmin\requireBuildSources;
 
-final class BuildCommand extends Command
+#[AsCommand('build', 'Rebuild GeoNames SQLite files when --force is passed; otherwise refresh metadata only.')]
+final class BuildCommand
 {
     public function __construct(
         private readonly AdminConfig $config,
     ) {
-        parent::__construct('build');
     }
 
-    protected function configure(): void
-    {
-        $this
-            ->setDescription('Rebuild GeoNames SQLite files when --force is passed; otherwise refresh metadata only.')
-            ->addOption('source-dir', null, InputOption::VALUE_REQUIRED, 'Directory containing downloaded GeoNames source files.', $this->config->sourceDir)
-            ->addOption('output-dir', null, InputOption::VALUE_REQUIRED, 'Directory where SQLite files should be written.', $this->config->outputDir)
-            ->addOption('hf-account', null, InputOption::VALUE_REQUIRED, 'Hugging Face account or org name to use in generated dataset card examples.', $this->config->hfAccount)
-            ->addOption('force', null, InputOption::VALUE_NONE, 'Rebuild SQLite databases before refreshing metadata.')
-            ->addOption('country', null, InputOption::VALUE_REQUIRED | InputOption::VALUE_IS_ARRAY, 'Country code to rebuild. Use ALL for every country database.', ['ALL']);
-    }
+    public function __invoke(
+        SymfonyStyle $io,
+        #[Option('Directory containing downloaded GeoNames source files')] ?string $sourceDir = null,
+        #[Option('Directory where SQLite files should be written')] ?string $outputDir = null,
+        #[Option('Hugging Face account or org name for generated dataset card examples')] ?string $hfAccount = null,
+        #[Option('Rebuild SQLite databases before refreshing metadata')] bool $force = false,
+        #[Option('Country code to rebuild; repeat or use ALL for every country database')] array $country = ['ALL'],
+    ): int {
+        $sourceDir ??= $this->config->sourceDir;
+        $outputDir ??= $this->config->outputDir;
+        $hfAccount ??= $this->config->hfAccount;
 
-    protected function execute(InputInterface $input, OutputInterface $output): int
-    {
-        $io = new SymfonyStyle($input, $output);
-        $filesystem = new Filesystem();
+        $sourceDir = rtrim($sourceDir, '/');
+        $outputDir = rtrim($outputDir, '/');
+        $countries = arrayValuesUniqueUpper($country);
 
-        $sourceDir = rtrim((string) $input->getOption('source-dir'), '/');
-        $outputDir = rtrim((string) $input->getOption('output-dir'), '/');
-        $hfAccount = (string) $input->getOption('hf-account');
-        $force = (bool) $input->getOption('force');
-        $countries = arrayValuesUniqueUpper(is_array($input->getOption('country')) ? $input->getOption('country') : []);
-
-        $filesystem->mkdir($outputDir, 0700);
+        (new Filesystem())->mkdir($outputDir, 0700);
 
         $io->title('Build GeoNames SQLite databases');
         $io->text(sprintf('Source directory: %s', $sourceDir));
