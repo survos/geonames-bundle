@@ -16,15 +16,17 @@ The bundle should:
 
 Public runtime artifacts:
 
-- `geo.sqlite`: countries and states
-- `<countryCode>.sqlite`: country-specific city databases, starting with `us.sqlite`
+- `geo.sqlite`: every country, plus admin1/admin2 (state/county-level) records, plus alias lookups
+- `<countryCode>.sqlite`: one per-country city database, for every country GeoNames covers — not just
+  `us.sqlite`. `--country` on both admin commands (below) defaults to `ALL`; a single country is the
+  narrowed case, not the initial one.
 
 Public bundle workflow:
 
 1. Install `survos/geonames-bundle`
 2. Run `bin/console survos:geo`
 3. Fetch `geo.sqlite`
-4. Optionally fetch `us.sqlite`
+4. Optionally fetch one or more `<countryCode>.sqlite` (e.g. `us`, `hu`, `ch`)
 5. Query the local authority through `GeoService`
 
 Example:
@@ -51,14 +53,14 @@ Build steps:
 
 ## GeoNames Source Files
 
-The build process should use GeoNames files directly.
+The build process uses GeoNames files directly.
 
 Required files:
 
-- `countryInfo.txt`
-- `admin1CodesASCII.txt`
-- `admin2Codes.txt`
-- `allCountries.zip`
+- `countryInfo.txt`, `admin1CodesASCII.txt`, `admin2Codes.txt`, `hierarchy.zip` — `geo.sqlite` inputs
+- `<countryCode>.zip` (one per country, e.g. `US.zip`, `HU.zip`) — city inputs, fetched per country
+  rather than the single combined `allCountries.zip`, so `download`/`build` can target a subset of
+  countries without pulling (or re-parsing) the whole world.
 
 Why:
 
@@ -68,14 +70,13 @@ Why:
 
 ## SQLite Targets
 
-Initial SQLite outputs:
+SQLite outputs:
 
 - `geo.sqlite`
-  contains `country`, `admin1`, `admin2`, and alias lookups
-- `us.sqlite`
-  contains `city` and alias lookups for United States populated places
-
-This keeps the first runtime story simple.
+  contains `country`, `admin1`, `admin2`, and alias lookups — every country GeoNames covers
+- `<countryCode>.sqlite`, one per country
+  contains `city` and alias lookups for that country's populated places. `admin/build --country=ALL`
+  (the default) builds one for every country; `--country=us,hu,ch` narrows to a subset.
 
 ## Import Strategy
 
@@ -99,14 +100,39 @@ Each Hugging Face dataset directory should contain:
 - the SQLite database file
 - optional metadata files
 
-Initial published artifacts:
+Published artifacts: `geo.sqlite` plus one `<countryCode>.sqlite` per built country (not just `us`).
 
-- `geo.sqlite`
-- `us.sqlite`
+## Actual status (last checked 2026-07-11)
+
+What works:
+
+- `admin download` / `admin build --force` genuinely build `geo.sqlite` and per-country `<cc>.sqlite`
+  from real GeoNames source files — prepared statements, indexes after insert, no ORM, matches the
+  Import Strategy above. `--country` already defaults to `ALL`.
+- `GeoService`'s runtime query API (country/admin1/admin2/city lookups, multi-level
+  "City, State, Country" parsing, alias resolution) is implemented and reasonably capable.
+
+What's missing:
+
+1. **`survos:geo` (the public fetch command) is a stub** — it does not actually download anything yet.
+   No app can currently consume a published database through the bundle's own workflow.
+2. **Nothing has actually been published.** `refreshMetadata()` regenerates local dataset-card
+   `README.md`s only; there is no confirmed upload-to-Hugging-Face step, and no SQLite file exists
+   anywhere in this repo or its build output — the pipeline has not been run end-to-end.
+3. `data/normalized/{iso-3166-2,world-cities}.json` (~2.9 MB) are unused by any current code — dead
+   weight from an earlier pre-SQLite approach. Delete once confirmed nothing external depends on them.
+4. The bundle class is still the pre-`kit-bundle` pattern (`src/DependencyInjection/{Configuration,
+   SurvosGeonamesExtension}.php` + `src/Resources/config/services.php`) — see `bu/CLAUDE.md`'s bundle
+   rules; migrate onto `AbstractSurvosBundle` when next touched.
+5. Not wired into any consuming app yet.
 
 ## Next Steps
 
-1. Build `geo.sqlite` from `countryInfo.txt`, `admin1CodesASCII.txt`, and `admin2Codes.txt`.
-2. Build `us.sqlite` from `allCountries.zip` filtered to US populated places.
-3. Review alias coverage for country and admin lookups.
-4. Wire `survos:geo` to fetch the published databases.
+1. Actually run `admin download --country=ALL` + `admin build --force --country=ALL` once, end to end,
+   and confirm real output.
+2. Decide and implement the actual Hugging Face upload step (or another distribution mechanism).
+3. Implement `survos:geo` for real: fetch `geo.sqlite` (+ requested `<countryCode>.sqlite`) from wherever
+   step 2 publishes to.
+4. Delete `data/normalized/`.
+5. Migrate the bundle class onto `kit-bundle`/`AbstractSurvosBundle`.
+6. Review alias coverage for country and admin lookups.
