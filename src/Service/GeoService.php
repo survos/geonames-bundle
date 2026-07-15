@@ -268,10 +268,17 @@ final class GeoService
 
     private function findCity(string $city, string $countryCode, ?string $admin1Code = null): ?GeoRecord
     {
-        $sql = 'SELECT DISTINCT city.geoname_id, city.name, city.ascii_name, city.country_code, city.admin1_code, city.admin2_code, city.feature_code, city.population, city.latitude, city.longitude
+        // A direct name/ascii_name match always outranks an alias-only match, regardless of
+        // population — otherwise a small town whose exact name is also some much bigger city's
+        // historical/alternate name (e.g. "Waterloo" is a recorded alias of Austin, TX) loses to
+        // that bigger city purely on population, which is a wrong-city result, not just a
+        // coarser one. Alias matches are still used, but only to break ties among themselves or
+        // when there's no direct name match at all.
+        $sql = "SELECT DISTINCT city.geoname_id, city.name, city.ascii_name, city.country_code, city.admin1_code, city.admin2_code, city.feature_code, city.population, city.latitude, city.longitude,
+                    CASE WHEN lower(city.name) = :name OR lower(city.ascii_name) = :name THEN 0 ELSE 1 END AS match_rank
                 FROM city
                 LEFT JOIN alias ON alias.geoname_id = city.geoname_id
-                WHERE (lower(city.name) = :name OR lower(city.ascii_name) = :name OR alias.alias = :name)';
+                WHERE (lower(city.name) = :name OR lower(city.ascii_name) = :name OR alias.alias = :name)";
         $params = ['name' => strtolower($city)];
 
         if (null !== $admin1Code) {
@@ -279,7 +286,7 @@ final class GeoService
             $params['admin1_code'] = $admin1Code;
         }
 
-        $sql .= ' ORDER BY city.population DESC, city.geoname_id ASC LIMIT 1';
+        $sql .= ' ORDER BY match_rank ASC, city.population DESC, city.geoname_id ASC LIMIT 1';
         $statement = $this->countryConnection($countryCode)->prepare($sql);
         $statement->execute($params);
         $row = $statement->fetch(PDO::FETCH_ASSOC);
