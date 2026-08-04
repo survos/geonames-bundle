@@ -10,51 +10,76 @@ The runtime model is intentionally small:
 
 ## Runtime Databases
 
-Initial published databases:
+Published databases:
 
 - `geo.sqlite`
-  contains countries and states
-- `us.sqlite`
-  contains United States cities
+  contains `country`, `admin1`, `admin2`, and alias lookups for every country GeoNames covers
+- `<countryCode>.sqlite` (e.g. `us.sqlite`, `hu.sqlite`)
+  contains that country's cities (`city` table), name-lookup aliases (`alias` table), and
+  locale-specific alternate names (`alt_name` table — see below)
 
 GeoNames provides the canonical ids, so the shared runtime base is `geo.sqlite`, with country-specific city databases layered on top.
 
+### Locale-specific alternate names (`alt_name`)
+
+Each `<countryCode>.sqlite` also carries an `alt_name` table (`geoname_id`, `iso_language`,
+`alternate_name`, `is_preferred`, `is_short`, `is_colloquial`, `is_historic`) sourced from GeoNames'
+per-country `alternatenames/<CC>.zip` export — the real language-tagged data (German "Wien" vs.
+French "Vienne" vs. English "Vienna" for the same `geonameId`), not the untagged `alternatenames`
+convenience column already on `city` rows. Query it through:
+
+```php
+$names = $this->geoService->alternateNames(3054643, 'HU'); // Budapest
+// ['de' => ['Budapest', 'Ofen-Pest'], 'ru' => ['Будапешт'], 'sk' => ['Budapešť'], ...]
+```
+
+Cities only for now — `country`/`admin1`/`admin2` alt names in `geo.sqlite` aren't wired up yet (see
+PLAN.md). Background: [survos/mono#26](https://github.com/survos/mono/issues/26).
+
 ## Build Workflow
 
-Build-time tooling is separate from the public bundle command.
+Build-time tooling is separate from the public bundle command, so the published bundle itself stays
+light — `admin/` has its own dev dependencies (`composer install` inside `bu/geonames-bundle`) and
+never ships to consumer apps.
 
-Admin tools:
+Admin console (`admin/admin.php`, a standalone Symfony Console app):
 
-- `admin/download-geonames.php`
-- `admin/build-sqlite.php`
+```bash
+cd admin
+php admin.php download --country=hu       # fetch GeoNames source files for one country
+php admin.php download --country=us,hu,ch # or several
+php admin.php download --all              # every country (~a few GB, minutes at broadband speed)
+php admin.php build --force --country=hu  # rebuild geo.sqlite + hu.sqlite from downloaded sources
+php admin.php metadata                    # regenerate README.md/datasets.jsonl only, no rebuild
+```
 
-Current build sequence:
+`download` fetches, per requested country, both `<CC>.zip` (cities) and `alternatenames/<CC>.zip`
+(locale-specific alternate names — see above) alongside the shared `countryInfo.txt`,
+`admin1CodesASCII.txt`, `admin2Codes.txt`, `timeZones.txt`, `hierarchy.zip`. `build --force` parses
+those files directly into SQLite with prepared statements — no ORM — and refreshes the dataset-card
+`README.md`/`datasets.jsonl` in the output directory.
 
-1. Download the GeoNames source files.
-2. Run `admin/build-sqlite.php`.
-3. Parse the downloaded GeoNames files directly and insert them into SQLite with prepared statements.
-4. Publish the SQLite artifacts to Hugging Face.
+### One-shot: download + build + publish
 
-## GeoNames Source Files
+`admin/publish.sh` runs the full pipeline — download, build, and `hf upload` to the
+`museado/geonames-data` Hugging Face dataset — for a country or every country:
 
-The build command currently depends on:
+```bash
+cd admin
+./publish.sh                  # every country GeoNames covers
+./publish.sh us,hu,ch         # just these countries
+SKIP_UPLOAD=1 ./publish.sh hu # download + build only, skip the Hugging Face upload
+```
 
-- `countryInfo.txt`
-- `admin1CodesASCII.txt`
-- `admin2Codes.txt`
-- `allCountries.zip`
-
-These files carry the GeoNames ids needed to keep countries, administrative areas, and cities on the same authority system.
+Requires the [`hf` CLI](https://huggingface.co/docs/huggingface_hub/guides/cli)
+(`pip install -U huggingface_hub[cli]`) logged in with write access to the dataset repo
+(`hf auth login`) unless `SKIP_UPLOAD=1`.
 
 ## Publishing To Hugging Face
 
-The published output should include:
-
-- a `README.md` dataset card with YAML front matter
-- `geo.sqlite`
-- `us.sqlite`
-
-The public bundle command will fetch those published SQLite files rather than rebuilding them locally.
+Each Hugging Face dataset directory contains a `README.md` dataset card, `datasets.jsonl`, `geo.sqlite`,
+and one `<countryCode>.sqlite` per built country. `survos:geo` (the runtime bundle command, below)
+fetches those published files rather than rebuilding them locally.
 
 ## Installing The Bundle
 
@@ -64,20 +89,16 @@ composer req survos/geonames-bundle
 
 ## Fetching The Authority
 
-The public Symfony command is:
+The public Symfony command:
 
 ```bash
-bin/console survos:geo
+bin/console survos:geo                  # fetch geo.sqlite
+bin/console survos:geo --country=us,hu  # + one or more per-country city databases
+bin/console survos:geo --all            # every published per-country database (~3.4 GB)
 ```
 
-Planned usage:
-
-```bash
-bin/console survos:geo
-bin/console survos:geo --country=us
-```
-
-The current bundle command is still a stub; the admin commands are the active build path.
+fetches the published SQLite databases straight from the `museado/geonames-data` Hugging Face
+dataset into `GeoService::sqliteDir()` — no auth needed, it's a public repo.
 
 ## Using The Bundle
 
@@ -91,4 +112,4 @@ $geoId = $this->geoService->find('Oslo');
 
 We will refine the query methods and return values later. For now, the design center is local lookup against fetched authority data.
 
-See [PLAN.md](/home/tac/g/sites/mono/bu/geonames-bundle/PLAN.md) for the CSV layout and next migration steps.
+See [PLAN.md](./PLAN.md) for the CSV layout and next migration steps.
