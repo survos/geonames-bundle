@@ -218,6 +218,34 @@ final class GeoService
         return null;
     }
 
+    /**
+     * Locale-specific alternate names for a place, e.g. the German/French/English variants of
+     * Vienna. Only backed by per-country city databases today (see PLAN.md) — country/admin1/admin2
+     * geoname_ids always return an empty array.
+     *
+     * @return array<string, list<string>> alternate names keyed by ISO language code; unlabeled
+     *                                      names (GeoNames leaves iso_language blank sometimes) are
+     *                                      grouped under the empty string key
+     */
+    public function alternateNames(int $geonameId, string $countryCode): array
+    {
+        $statement = $this->countryConnection($countryCode)->prepare(
+            'SELECT iso_language, alternate_name
+             FROM alt_name
+             WHERE geoname_id = :geoname_id
+             ORDER BY is_preferred DESC, alternate_name ASC'
+        );
+        $statement->execute(['geoname_id' => $geonameId]);
+
+        $names = [];
+        foreach ($statement->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $lang = $row['iso_language'] ?? '';
+            $names[$lang][] = $row['alternate_name'];
+        }
+
+        return $names;
+    }
+
     public function sqliteDir(): string
     {
         if (null !== $this->sqliteDir && '' !== trim($this->sqliteDir)) {

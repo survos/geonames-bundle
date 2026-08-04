@@ -143,13 +143,13 @@ SQL);
     $io->text(sprintf('Inserted %d countries, %d admin1 rows, %d admin2 rows.', $countryCount, $admin1Count, $admin2Count));
 }
 
-function buildCityDatabase(string $databasePath, string $countryZipPath, string $countryCode, SymfonyStyle $io): void
+function buildCityDatabase(string $databasePath, string $countryZipPath, string $countryCode, SymfonyStyle $io, ?string $altNamesZipPath = null): void
 {
     if (!is_file($countryZipPath)) throw new RuntimeException(sprintf('Missing required GeoNames country archive: %s. Run ./admin download --country=%s first.', $countryZipPath, strtoupper($countryCode)));
     @unlink($databasePath); @unlink($databasePath.'-wal'); @unlink($databasePath.'-shm');
     $pdo = createSqliteConnection($databasePath);
     $io->section(sprintf('Building %s', basename($databasePath)));
-    $pdo->exec("CREATE TABLE city ( geoname_id INTEGER PRIMARY KEY, name TEXT NOT NULL, ascii_name TEXT NULL, alternate_names TEXT NULL, latitude REAL NULL, longitude REAL NULL, feature_class TEXT NULL, feature_code TEXT NULL, country_code TEXT NOT NULL, admin1_code TEXT NULL, admin2_code TEXT NULL, population INTEGER NULL, timezone TEXT NULL, modification_date TEXT NULL ); CREATE TABLE alias ( alias TEXT NOT NULL, geoname_id INTEGER NOT NULL, PRIMARY KEY (alias, geoname_id) );");
+    $pdo->exec("CREATE TABLE city ( geoname_id INTEGER PRIMARY KEY, name TEXT NOT NULL, ascii_name TEXT NULL, alternate_names TEXT NULL, latitude REAL NULL, longitude REAL NULL, feature_class TEXT NULL, feature_code TEXT NULL, country_code TEXT NOT NULL, admin1_code TEXT NULL, admin2_code TEXT NULL, population INTEGER NULL, timezone TEXT NULL, modification_date TEXT NULL ); CREATE TABLE alias ( alias TEXT NOT NULL, geoname_id INTEGER NOT NULL, PRIMARY KEY (alias, geoname_id) ); CREATE TABLE alt_name ( geoname_id INTEGER NOT NULL, iso_language TEXT NULL, alternate_name TEXT NOT NULL, is_preferred INTEGER NOT NULL DEFAULT 0, is_short INTEGER NOT NULL DEFAULT 0, is_colloquial INTEGER NOT NULL DEFAULT 0, is_historic INTEGER NOT NULL DEFAULT 0 );");
     $pdo->beginTransaction();
     $cityStatement = $pdo->prepare("INSERT INTO city (geoname_id, name, ascii_name, alternate_names, latitude, longitude, feature_class, feature_code, country_code, admin1_code, admin2_code, population, timezone, modification_date) VALUES (:geoname_id, :name, :ascii_name, :alternate_names, :latitude, :longitude, :feature_class, :feature_code, :country_code, :admin1_code, :admin2_code, :population, :timezone, :modification_date)");
     $aliasStatement = $pdo->prepare("INSERT OR IGNORE INTO alias (alias, geoname_id) VALUES (:alias, :geoname_id)");
@@ -170,9 +170,73 @@ function buildCityDatabase(string $databasePath, string $countryZipPath, string 
         ++$cityCount;
     }
     $progressBar->setProgress($memberSize); $progressBar->finish(); $io->newLine(2);
+
+    $altNameCount = null !== $altNamesZipPath
+        ? importCityAltNames($pdo, $altNamesZipPath, $countryCode, $io)
+        : 0;
+
     $pdo->commit();
-    $pdo->exec("CREATE INDEX idx_city_name ON city(name); CREATE INDEX idx_city_ascii_name ON city(ascii_name); CREATE INDEX idx_city_admin1_code ON city(admin1_code); CREATE INDEX idx_city_population ON city(population); CREATE INDEX idx_city_alias ON alias(alias); ANALYZE; VACUUM;");
+    $pdo->exec("CREATE INDEX idx_city_name ON city(name); CREATE INDEX idx_city_ascii_name ON city(ascii_name); CREATE INDEX idx_city_admin1_code ON city(admin1_code); CREATE INDEX idx_city_population ON city(population); CREATE INDEX idx_city_alias ON alias(alias); CREATE INDEX idx_alt_name_geoname ON alt_name(geoname_id); CREATE INDEX idx_alt_name_lang ON alt_name(geoname_id, iso_language); ANALYZE; VACUUM;");
     $io->text(sprintf('Inserted %d city rows for %s.', $cityCount, strtoupper($countryCode)));
+    if (null !== $altNamesZipPath) {
+        $io->text(sprintf('Inserted %d language-tagged alternate names for %s.', $altNameCount, strtoupper($countryCode)));
+    }
+}
+
+/**
+ * Imports GeoNames' per-country `alternatenames/<CC>.zip` (alternateNameId, geonameid, isolanguage,
+ * alternate name, isPreferredName, isShortName, isColloquial, isHistoric, from, to) into `alt_name`,
+ * restricted to real ISO-639 language tags — GeoNames overloads the isolanguage column with pseudo-
+ * language codes for postal codes ('post'), Wikidata ids ('wkdt'), phonetic spellings ('phon'),
+ * airport/UN/LOCODE ids ('iata','icao','faac','unlc','tcid'), abbreviations ('abbr'), and historic
+ * period tags ('fr_1793'); all of those run 4+ characters, so filtering to length <= 3 keeps the
+ * real ISO 639-1/639-3 tags and drops the rest without needing an explicit denylist — and to
+ * geoname_ids that ended up in this country's `city` table (dropping alt names for admin areas,
+ * POIs, etc. this database doesn't otherwise track).
+ */
+function importCityAltNames(PDO $pdo, string $altNamesZipPath, string $countryCode, SymfonyStyle $io): int
+{
+    if (!is_file($altNamesZipPath)) {
+        $io->warning(sprintf('Missing alternatenames archive: %s — skipping alt_name import.', $altNamesZipPath));
+
+        return 0;
+    }
+
+    [$zipMember, $memberSize] = resolveZipMember($altNamesZipPath, strtoupper($countryCode));
+    $io->title(sprintf('Importing %s from %s', $zipMember, basename($altNamesZipPath)));
+    $progressBar = new ProgressBar($io, $memberSize);
+    $progressBar->setFormat('%current%/%max% [%bar%] %percent:3s%% %elapsed:6s%/%estimated:-6s% %message%');
+    $progressBar->setMessage(sprintf('Importing %s alternate names', strtoupper($countryCode)));
+    $progressBar->start();
+
+    $altNameStatement = $pdo->prepare("INSERT INTO alt_name (geoname_id, iso_language, alternate_name, is_preferred, is_short, is_colloquial, is_historic) VALUES (:geoname_id, :iso_language, :alternate_name, :is_preferred, :is_short, :is_colloquial, :is_historic)");
+
+    $count = 0;
+    foreach (iterateCountryZip($altNamesZipPath, $zipMember) as [$row, $position]) {
+        $progressBar->setProgress(min($memberSize, $position));
+        if (count($row) < 4) continue;
+        [$altNameId, $geonameId, $isoLanguage, $alternateName, $isPreferred, $isShort, $isColloquial, $isHistoric] = array_pad($row, 8, null);
+        $isoLanguage = normalizeNullable($isoLanguage);
+        $alternateName = normalizeNullable($alternateName);
+        if (null === $alternateName || !is_numeric($geonameId)) continue;
+        if (null !== $isoLanguage && strlen($isoLanguage) > 3) continue;
+
+        $altNameStatement->execute([
+            'geoname_id' => (int) $geonameId,
+            'iso_language' => $isoLanguage,
+            'alternate_name' => $alternateName,
+            'is_preferred' => '1' === $isPreferred ? 1 : 0,
+            'is_short' => '1' === $isShort ? 1 : 0,
+            'is_colloquial' => '1' === $isColloquial ? 1 : 0,
+            'is_historic' => '1' === $isHistoric ? 1 : 0,
+        ]);
+        ++$count;
+    }
+    $progressBar->setProgress($memberSize); $progressBar->finish(); $io->newLine(2);
+
+    $pdo->exec('DELETE FROM alt_name WHERE geoname_id NOT IN (SELECT geoname_id FROM city)');
+
+    return (int) $pdo->query('SELECT COUNT(*) FROM alt_name')->fetchColumn();
 }
 
 function createSqliteConnection(string $databasePath): PDO { try { $pdo = new PDO('sqlite:' . $databasePath); $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION); $pdo->exec('PRAGMA journal_mode = WAL;'); $pdo->exec('PRAGMA synchronous = NORMAL;'); $pdo->exec('PRAGMA temp_store = MEMORY;'); $pdo->exec('PRAGMA foreign_keys = OFF;'); return $pdo; } catch (PDOException $exception) { throw new RuntimeException(sprintf('Unable to create SQLite database at %s', $databasePath), 0, $exception); } }

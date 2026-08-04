@@ -68,11 +68,13 @@ final class BuildCommand
             }
 
             foreach ($countries as $countryCode) {
+                $altNamesZip = $sourceDir . '/alternatenames/' . strtoupper($countryCode) . '.zip';
                 buildCityDatabase(
                     $outputDir . '/' . strtolower($countryCode) . '.sqlite',
                     $sourceDir . '/' . strtoupper($countryCode) . '.zip',
                     $countryCode,
                     $io,
+                    is_file($altNamesZip) ? $altNamesZip : null,
                 );
             }
         }

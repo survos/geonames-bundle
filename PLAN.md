@@ -102,6 +102,29 @@ Each Hugging Face dataset directory should contain:
 
 Published artifacts: `geo.sqlite` plus one `<countryCode>.sqlite` per built country (not just `us`).
 
+## Locale-Specific Alternate Names (survos/mono#26)
+
+Cities carry a language-tagged `alt_name` table alongside `city`/`alias` in each `<countryCode>.sqlite`,
+sourced from GeoNames' per-country `alternatenames/<CC>.zip` export (NOT the flat `alternatenames`
+convenience column already on the `city` row, which has no language tagging at all).
+
+- `admin download` also fetches `alternatenames/<CC>.zip` for every requested country, alongside
+  `<CC>.zip`, into `<sourceDir>/alternatenames/<CC>.zip`.
+- `admin build --force` imports it into `alt_name (geoname_id, iso_language, alternate_name,
+  is_preferred, is_short, is_colloquial, is_historic)`, filtered to real ISO-639 language tags
+  (GeoNames' `isolanguage` column also carries 4+ char pseudo-language codes for postal codes
+  (`post`), Wikidata ids (`wkdt`), phonetic spellings (`phon`), transport/UN codes (`iata`, `icao`,
+  `faac`, `unlc`, `tcid`), abbreviations (`abbr`), and historic-period tags (`fr_1793`) — filtering
+  `iso_language` to length <= 3 drops all of those without an explicit denylist) and to geoname_ids
+  already present in that country's `city` table.
+- `GeoService::alternateNames(int $geonameId, string $countryCode): array` returns names keyed by
+  ISO language code.
+
+Not covered: `country`/`admin1`/`admin2` alternate names in `geo.sqlite` — those geoname_ids aren't
+in any single country's `alternatenames/<CC>.zip` in general (admin1 name geoname_ids could show up
+under their own country though, that's just not wired up yet). Fast-follow, not blocking — the
+originating issue's use case (facet-vocabulary place tags) is dominated by cities.
+
 ## Actual status (last checked 2026-07-11)
 
 What works:

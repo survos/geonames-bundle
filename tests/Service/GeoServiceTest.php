@@ -124,6 +124,23 @@ final class GeoServiceTest extends TestCase
         self::assertSame('US', $record->countryCode);
     }
 
+    #[Test]
+    public function alternateNamesReturnsNamesKeyedByLanguage(): void
+    {
+        $names = $this->service->alternateNames(4930956, 'US');
+
+        self::assertSame(['Bostón'], $names['es']);
+        self::assertSame(['Boston'], $names['de']);
+        self::assertSame(['Boston'], $names['fr']);
+        self::assertSame(['Boston City'], $names['']);
+    }
+
+    #[Test]
+    public function alternateNamesReturnsEmptyArrayWhenNoneRecorded(): void
+    {
+        self::assertSame([], $this->service->alternateNames(4502552, 'US'));
+    }
+
     private function createGeoDatabase(): void
     {
         $pdo = new PDO('sqlite:' . $this->sqliteDir . '/geo.sqlite');
@@ -223,6 +240,15 @@ CREATE TABLE alias (
     geoname_id INTEGER NOT NULL,
     PRIMARY KEY (alias, geoname_id)
 );
+CREATE TABLE alt_name (
+    geoname_id INTEGER NOT NULL,
+    iso_language TEXT NULL,
+    alternate_name TEXT NOT NULL,
+    is_preferred INTEGER NOT NULL DEFAULT 0,
+    is_short INTEGER NOT NULL DEFAULT 0,
+    is_colloquial INTEGER NOT NULL DEFAULT 0,
+    is_historic INTEGER NOT NULL DEFAULT 0
+);
 SQL);
 
         $pdo->exec(<<<'SQL'
@@ -237,6 +263,11 @@ INSERT INTO alias (alias, geoname_id) VALUES
     ('mount laurel', 4502552),
     ('mt. laurel', 4502552),
     ('mount laurel township', 4502552);
+INSERT INTO alt_name (geoname_id, iso_language, alternate_name, is_preferred) VALUES
+    (4930956, 'de', 'Boston', 0),
+    (4930956, 'fr', 'Boston', 0),
+    (4930956, 'es', 'Bostón', 1),
+    (4930956, '', 'Boston City', 0);
 SQL);
     }
 }

@@ -61,6 +61,7 @@ final class DownloadCommand
 
         foreach ($countries as $countryCode) {
             $selectedFiles[] = sprintf('%s.zip', $countryCode);
+            $selectedFiles[] = sprintf('alternatenames/%s.zip', $countryCode);
         }
         $selectedFiles = array_values(array_unique($selectedFiles));
 
@@ -69,11 +70,13 @@ final class DownloadCommand
         $io->text(sprintf('Target directory: %s', $downloadDir));
 
         foreach ($selectedFiles as $filename) {
-            $targetPath = $downloadDir . '/' . basename($filename);
+            $targetPath = $downloadDir . '/' . $filename;
             if (!$force && is_file($targetPath)) {
-                $io->writeln(sprintf('Skipping %s, already present.', basename($targetPath)));
+                $io->writeln(sprintf('Skipping %s, already present.', $filename));
                 continue;
             }
+
+            $filesystem->mkdir(dirname($targetPath), 0700);
 
             downloadToFile(
                 httpClient: $httpClient,
