@@ -33,7 +33,11 @@
     },
     "autoload-dev": {
         "psr-4": {
-            "Survos\\GeonamesBundle\\Tests\\": "tests/"
-        }
+            "Survos\\GeonamesBundle\\Tests\\": "tests/",
+            "Survos\\GeonamesAdmin\\": "admin/src/"
+        },
+        "files": [
+            "admin/src/functions.php"
+        ]
     }
 }
