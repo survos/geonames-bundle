@@ -24,10 +24,14 @@ GeoNames provides the canonical ids, so the shared runtime base is `geo.sqlite`,
 
 GeoNames covers countries, administrative regions, and populated places (cities/towns) — it is not
 comprehensive for individual schools, stores, churches, or other points of interest, and this bundle
-doesn't try to make it one. For OSM/Nominatim-backed points of interest — a specific building, park,
-or business, as opposed to the city it's in — see
-[`survos/place-map-bundle`](../place-map-bundle), the companion bundle for that layer. See
-[survos/mono#28](https://github.com/survos/mono/issues/28) for how that split was decided.
+doesn't try to make it one. For that layer, two companion bundles:
+
+- [`survos/place-map-bundle`](../place-map-bundle) — a curated point/polygon library, one Nominatim
+  query at a time.
+- [`survos/poi-bundle`](../poi-bundle) — bulk/automated matching of a literal name (e.g. from a
+  facet tag) against OSM features within a city this bundle already resolved.
+
+See [survos/mono#28](https://github.com/survos/mono/issues/28) for how the split was decided.
 
 ### Locale-specific alternate names (`alt_name`)
 
