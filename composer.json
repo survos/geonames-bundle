@@ -11,6 +11,7 @@
     "type": "symfony-bundle",
     "require": {
         "php": "^8.5",
+        "survos/fetch-bundle": "^2.5",
         "survos/jsonl-bundle": "^2.5",
         "symfony/config": "^8.1",
         "symfony/console": "^8.1",

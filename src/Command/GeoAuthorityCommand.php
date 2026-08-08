@@ -4,12 +4,13 @@ declare(strict_types=1);
 
 namespace Survos\GeonamesBundle\Command;
 
+use Survos\FetchBundle\Contract\PersistentFetcherInterface;
+use Survos\FetchBundle\Service\ChunkDownloader;
 use Survos\GeonamesBundle\Service\GeoService;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Attribute\Option;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Style\SymfonyStyle;
-use Symfony\Contracts\HttpClient\HttpClientInterface;
 use Zenstruck\Bytes;
 
 /**
@@ -31,7 +32,14 @@ final class GeoAuthorityCommand
     private const TREE_URL = 'https://huggingface.co/api/datasets/' . self::REPO . '/tree/main';
 
     public function __construct(
-        private readonly HttpClientInterface $httpClient,
+        // Streams multi-GB sqlite downloads with Range resume + retry -- the right fetch-bundle
+        // tool for large binaries, as opposed to PersistentFetcher below, which buffers the whole
+        // response into its cache pool (fine for JSON, wrong for gigabytes). See this bundle's
+        // README.
+        private readonly ChunkDownloader $chunkDownloader,
+        // The file listing is small JSON and safe to cache -- avoids re-hitting the HF Hub API
+        // tree endpoint on every --all run.
+        private readonly PersistentFetcherInterface $persistentFetcher,
         private readonly GeoService $geo,
     ) {
     }
@@ -84,7 +92,7 @@ final class GeoAuthorityCommand
             }
 
             try {
-                $bytes = $this->download($file, $dest);
+                $bytes = $this->download($file, $dest, $force);
                 $fetched++;
                 $io->writeln(sprintf('  <info>fetched</info> %s (%s)', $file, Bytes::parse($bytes)->humanize()));
             } catch (\Throwable $e) {
@@ -101,7 +109,11 @@ final class GeoAuthorityCommand
     /** @return list<string> every file path published in the dataset repo */
     private function listPublishedFiles(): array
     {
-        $rows = $this->httpClient->request('GET', self::TREE_URL . '?recursive=1')->toArray();
+        $result = $this->persistentFetcher->fetch(self::TREE_URL . '?recursive=1');
+        if (!$result->isOkay()) {
+            throw new \RuntimeException(sprintf('Failed to list %s: HTTP %d', self::REPO, $result->statusCode));
+        }
+        $rows = json_decode($result->contents ?? '', true, flags: JSON_THROW_ON_ERROR);
 
         return array_values(array_filter(array_map(
             static fn (array $row): ?string => ($row['type'] ?? null) === 'file' ? (string) $row['path'] : null,
@@ -109,26 +121,11 @@ final class GeoAuthorityCommand
         )));
     }
 
-    /** Stream one file to disk (atomic via a .part temp). Returns bytes written. */
-    private function download(string $file, string $dest): int
+    /** Download one file to disk via ChunkDownloader: resumable (.part + Range), retried on transient failures. */
+    private function download(string $file, string $dest, bool $force): int
     {
-        $response = $this->httpClient->request('GET', self::BASE_URL . $file, ['max_redirects' => 5]);
-        if (200 !== $response->getStatusCode()) {
-            throw new \RuntimeException(sprintf('HTTP %d', $response->getStatusCode()));
-        }
-
-        $tmp = $dest . '.part';
-        $fh = fopen($tmp, 'wb');
-        if ($fh === false) {
-            throw new \RuntimeException('Cannot open for write: ' . $tmp);
-        }
-        $bytes = 0;
-        foreach ($this->httpClient->stream($response) as $chunk) {
-            $bytes += (int) fwrite($fh, $chunk->getContent());
-        }
-        fclose($fh);
-        rename($tmp, $dest);
-
-        return $bytes;
+        return $this->chunkDownloader->download(self::BASE_URL . $file, $dest, null, [
+            'overwrite' => $force,
+        ]);
     }
 }

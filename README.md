@@ -113,6 +113,25 @@ bin/console survos:geo --all            # every published per-country database (
 fetches the published SQLite databases straight from the `museado/geonames-data` Hugging Face
 dataset into `GeoService::sqliteDir()` — no auth needed, it's a public repo.
 
+### Fetch strategy (cache/retry/resume)
+
+`survos:geo` uses two different `survos/fetch-bundle` services for two different jobs — don't
+reach for the wrong one if extending this command:
+
+- **Listing published files** (`--all`, the HF Hub tree API call) goes through
+  `PersistentFetcherInterface` — small JSON, cached **forever** (until `forget()`/`force_fetch`)
+  in a SQLite pool at `var/data/fetch_cache.db`. Retried up to 5 times with full-jitter
+  exponential backoff (200ms base, 10s cap) on transport errors/429/5xx.
+- **Downloading the `.sqlite` files themselves** (up to ~3.4 GB total) goes through
+  `ChunkDownloader`, not `PersistentFetcher` — `PersistentFetcher` buffers the whole response
+  into the cache pool, which is fine for JSON and wrong for gigabytes. `ChunkDownloader` streams
+  straight to disk (constant memory), resumes via HTTP `Range` if a transfer drops partway
+  (`<file>.sqlite.part`), and retries transient failures independently of the listing cache.
+  `--force` passes `overwrite: true` through to it.
+
+Before 2026-08-08 `download()` was a hand-rolled stream-to-disk loop with **no resume** — a
+dropped 3 GB transfer restarted from byte 0.
+
 ## Using The Bundle
 
 The runtime API will stay lookup-oriented.
