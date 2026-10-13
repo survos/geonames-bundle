@@ -29,7 +29,7 @@ final readonly class AdminConfig
     private static function requiredEnv(string $name): string
     {
         $value = $_SERVER[$name] ?? $_ENV[$name] ?? getenv($name);
-        if (!is_string($value) || trim($value) === '') {
+        if (!is_string($value) || '' === trim($value)) {
             throw new RuntimeException(sprintf('Missing required environment variable %s in admin/.env', $name));
         }
 

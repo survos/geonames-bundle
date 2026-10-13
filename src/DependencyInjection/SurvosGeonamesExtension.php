@@ -16,7 +16,7 @@ final class SurvosGeonamesExtension extends Extension
         $config = $this->processConfiguration(new Configuration(), $configs);
         $container->setParameter('survos_geonames.sqlite_dir', $config['sqlite_dir']);
 
-        $loader = new PhpFileLoader($container, new FileLocator(__DIR__ . '/../Resources/config'));
+        $loader = new PhpFileLoader($container, new FileLocator(__DIR__.'/../Resources/config'));
         $loader->load('services.php');
     }
 

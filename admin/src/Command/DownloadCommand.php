@@ -41,21 +41,21 @@ final class DownloadCommand
         #[Option('Specific GeoNames files to fetch; repeat for multiple')] array $file = [],
         #[Option('Country code archives to fetch; repeat or use ALL for every country')] array $country = ['ALL'],
     ): int {
-        $endpoint    = rtrim($endpoint    ?? $this->config->endpoint,   '/') . '/';
-        $downloadDir = rtrim($downloadDir ?? $this->config->sourceDir,  '/');
-        $countries   = arrayValuesUniqueUpper($country);
+        $endpoint = rtrim($endpoint ?? $this->config->endpoint, '/').'/';
+        $downloadDir = rtrim($downloadDir ?? $this->config->sourceDir, '/');
+        $countries = arrayValuesUniqueUpper($country);
 
         $filesystem = new Filesystem();
         $httpClient = HttpClient::create();
         $filesystem->mkdir($downloadDir, 0700);
 
-        $selectedFiles = $file !== [] ? array_values(array_unique($file)) : self::DEFAULT_FILES;
+        $selectedFiles = [] !== $file ? array_values(array_unique($file)) : self::DEFAULT_FILES;
 
         if (in_array('ALL', $countries, true)) {
-            $countryInfoPath = $downloadDir . '/countryInfo.txt';
+            $countryInfoPath = $downloadDir.'/countryInfo.txt';
             $countries = is_file($countryInfoPath)
                 ? allCountryCodes($countryInfoPath)
-                : allCountryCodesFromEndpoint($httpClient, $endpoint . 'countryInfo.txt');
+                : allCountryCodesFromEndpoint($httpClient, $endpoint.'countryInfo.txt');
             $io->text(sprintf('Resolved ALL to %d country archives.', count($countries)));
         }
 
@@ -70,7 +70,7 @@ final class DownloadCommand
         $io->text(sprintf('Target directory: %s', $downloadDir));
 
         foreach ($selectedFiles as $filename) {
-            $targetPath = $downloadDir . '/' . $filename;
+            $targetPath = $downloadDir.'/'.$filename;
             if (!$force && is_file($targetPath)) {
                 $io->writeln(sprintf('Skipping %s, already present.', $filename));
                 continue;
@@ -81,7 +81,7 @@ final class DownloadCommand
             downloadToFile(
                 httpClient: $httpClient,
                 io: $io,
-                url: $endpoint . ltrim($filename, '/'),
+                url: $endpoint.ltrim($filename, '/'),
                 targetPath: $targetPath,
                 label: sprintf('Downloading %s', basename($targetPath)),
             );

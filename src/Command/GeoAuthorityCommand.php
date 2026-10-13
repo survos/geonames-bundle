@@ -28,8 +28,8 @@ use Zenstruck\Bytes;
 final class GeoAuthorityCommand
 {
     private const REPO = 'museado/geonames-data';
-    private const BASE_URL = 'https://huggingface.co/datasets/' . self::REPO . '/resolve/main/';
-    private const TREE_URL = 'https://huggingface.co/api/datasets/' . self::REPO . '/tree/main';
+    private const BASE_URL = 'https://huggingface.co/datasets/'.self::REPO.'/resolve/main/';
+    private const TREE_URL = 'https://huggingface.co/api/datasets/'.self::REPO.'/tree/main';
 
     public function __construct(
         // Streams multi-GB sqlite downloads with Range resume + retry -- the right fetch-bundle
@@ -60,15 +60,15 @@ final class GeoAuthorityCommand
         $files = ['geo.sqlite'];
         if ($all) {
             foreach ($this->listPublishedFiles() as $path) {
-                if (str_ends_with($path, '.sqlite') && $path !== 'geo.sqlite') {
+                if (str_ends_with($path, '.sqlite') && 'geo.sqlite' !== $path) {
                     $files[] = $path;
                 }
             }
         } elseif (null !== $country && '' !== trim($country)) {
             foreach (explode(',', $country) as $code) {
                 $code = strtolower(trim($code));
-                if ($code !== '') {
-                    $files[] = $code . '.sqlite';
+                if ('' !== $code) {
+                    $files[] = $code.'.sqlite';
                 }
             }
         }
@@ -82,9 +82,9 @@ final class GeoAuthorityCommand
 
         $fetched = $skipped = $failed = 0;
         foreach ($files as $file) {
-            $dest = $dir . '/' . $file;
+            $dest = $dir.'/'.$file;
             if (!$force && is_file($dest) && filesize($dest) > 0) {
-                $skipped++;
+                ++$skipped;
                 if ($io->isVerbose()) {
                     $io->writeln(sprintf('  <comment>skip</comment> %s (already present)', $file));
                 }
@@ -93,10 +93,10 @@ final class GeoAuthorityCommand
 
             try {
                 $bytes = $this->download($file, $dest, $force);
-                $fetched++;
+                ++$fetched;
                 $io->writeln(sprintf('  <info>fetched</info> %s (%s)', $file, Bytes::parse($bytes)->humanize()));
             } catch (\Throwable $e) {
-                $failed++;
+                ++$failed;
                 $io->writeln(sprintf('  <error>failed</error> %s: %s', $file, $e->getMessage()));
             }
         }
@@ -109,7 +109,7 @@ final class GeoAuthorityCommand
     /** @return list<string> every file path published in the dataset repo */
     private function listPublishedFiles(): array
     {
-        $result = $this->persistentFetcher->fetch(self::TREE_URL . '?recursive=1');
+        $result = $this->persistentFetcher->fetch(self::TREE_URL.'?recursive=1');
         if (!$result->isOkay()) {
             throw new \RuntimeException(sprintf('Failed to list %s: HTTP %d', self::REPO, $result->statusCode));
         }
@@ -124,7 +124,7 @@ final class GeoAuthorityCommand
     /** Download one file to disk via ChunkDownloader: resumable (.part + Range), retried on transient failures. */
     private function download(string $file, string $dest, bool $force): int
     {
-        return $this->chunkDownloader->download(self::BASE_URL . $file, $dest, null, [
+        return $this->chunkDownloader->download(self::BASE_URL.$file, $dest, null, [
             'overwrite' => $force,
         ]);
     }

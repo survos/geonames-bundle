@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Survos\GeonamesBundle\Tests\Service;
 
-use PDO;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Survos\GeonamesBundle\Service\GeoService;
@@ -16,7 +15,7 @@ final class GeoServiceTest extends TestCase
 
     protected function setUp(): void
     {
-        $this->sqliteDir = sys_get_temp_dir() . '/geonames-bundle-tests-' . uniqid('', true);
+        $this->sqliteDir = sys_get_temp_dir().'/geonames-bundle-tests-'.uniqid('', true);
         mkdir($this->sqliteDir, 0777, true);
 
         $this->createGeoDatabase();
@@ -27,7 +26,7 @@ final class GeoServiceTest extends TestCase
 
     protected function tearDown(): void
     {
-        foreach (glob($this->sqliteDir . '/*') ?: [] as $file) {
+        foreach (glob($this->sqliteDir.'/*') ?: [] as $file) {
             unlink($file);
         }
         @rmdir($this->sqliteDir);
@@ -143,8 +142,8 @@ final class GeoServiceTest extends TestCase
 
     private function createGeoDatabase(): void
     {
-        $pdo = new PDO('sqlite:' . $this->sqliteDir . '/geo.sqlite');
-        $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+        $pdo = new \PDO('sqlite:'.$this->sqliteDir.'/geo.sqlite');
+        $pdo->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
         $pdo->exec(<<<'SQL'
 CREATE TABLE country (
     geoname_id INTEGER PRIMARY KEY,
@@ -216,8 +215,8 @@ SQL);
 
     private function createUsDatabase(): void
     {
-        $pdo = new PDO('sqlite:' . $this->sqliteDir . '/us.sqlite');
-        $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+        $pdo = new \PDO('sqlite:'.$this->sqliteDir.'/us.sqlite');
+        $pdo->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
         $pdo->exec(<<<'SQL'
 CREATE TABLE city (
     geoname_id INTEGER PRIMARY KEY,

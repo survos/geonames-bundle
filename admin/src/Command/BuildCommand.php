@@ -55,23 +55,23 @@ final class BuildCommand
             requireBuildSources($sourceDir);
 
             buildGeoDatabase(
-                $outputDir . '/geo.sqlite',
-                $sourceDir . '/countryInfo.txt',
-                $sourceDir . '/admin1CodesASCII.txt',
-                $sourceDir . '/admin2Codes.txt',
+                $outputDir.'/geo.sqlite',
+                $sourceDir.'/countryInfo.txt',
+                $sourceDir.'/admin1CodesASCII.txt',
+                $sourceDir.'/admin2Codes.txt',
                 $io,
             );
 
             if (in_array('ALL', $countries, true)) {
-                $countries = allCountryCodes($sourceDir . '/countryInfo.txt');
+                $countries = allCountryCodes($sourceDir.'/countryInfo.txt');
                 $io->text(sprintf('Resolved ALL to %d country databases.', count($countries)));
             }
 
             foreach ($countries as $countryCode) {
-                $altNamesZip = $sourceDir . '/alternatenames/' . strtoupper($countryCode) . '.zip';
+                $altNamesZip = $sourceDir.'/alternatenames/'.strtoupper($countryCode).'.zip';
                 buildCityDatabase(
-                    $outputDir . '/' . strtolower($countryCode) . '.sqlite',
-                    $sourceDir . '/' . strtoupper($countryCode) . '.zip',
+                    $outputDir.'/'.strtolower($countryCode).'.sqlite',
+                    $sourceDir.'/'.strtoupper($countryCode).'.zip',
                     $countryCode,
                     $io,
                     is_file($altNamesZip) ? $altNamesZip : null,

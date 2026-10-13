@@ -4,14 +4,11 @@ declare(strict_types=1);
 
 namespace Survos\GeonamesBundle\Service;
 
-use PDO;
-use PDOException;
-use RuntimeException;
 use Survos\GeonamesBundle\Dto\GeoRecord;
 
 final class GeoService
 {
-    /** @var array<string, PDO> */
+    /** @var array<string, \PDO> */
     private array $connections = [];
 
     public function __construct(
@@ -36,7 +33,7 @@ final class GeoService
                 name: $row['name'],
                 countryCode: $row['iso2'],
             ),
-            $statement ? $statement->fetchAll(PDO::FETCH_ASSOC) : [],
+            $statement ? $statement->fetchAll(\PDO::FETCH_ASSOC) : [],
         );
     }
 
@@ -62,7 +59,7 @@ final class GeoService
                 countryCode: $row['country_code'],
                 admin1Code: $row['admin1_code'],
             ),
-            $statement->fetchAll(PDO::FETCH_ASSOC),
+            $statement->fetchAll(\PDO::FETCH_ASSOC),
         );
     }
 
@@ -92,7 +89,7 @@ final class GeoService
                 admin1Code: $row['admin1_code'],
                 admin2Code: $row['admin2_code'],
             ),
-            $statement->fetchAll(PDO::FETCH_ASSOC),
+            $statement->fetchAll(\PDO::FETCH_ASSOC),
         );
     }
 
@@ -129,7 +126,7 @@ final class GeoService
                 latitude: null !== $row['latitude'] ? (float) $row['latitude'] : null,
                 longitude: null !== $row['longitude'] ? (float) $row['longitude'] : null,
             ),
-            $statement->fetchAll(PDO::FETCH_ASSOC),
+            $statement->fetchAll(\PDO::FETCH_ASSOC),
         );
     }
 
@@ -160,7 +157,7 @@ final class GeoService
                  WHERE geoname_id = :geoname_id'
             );
             $statement->execute(['geoname_id' => $geonameId]);
-            $row = $statement->fetch(PDO::FETCH_ASSOC);
+            $row = $statement->fetch(\PDO::FETCH_ASSOC);
 
             if (is_array($row)) {
                 return new GeoRecord(
@@ -184,7 +181,7 @@ final class GeoService
                 'SELECT * FROM %s WHERE geoname_id = %d',
                 $table,
                 $geonameId,
-            ))?->fetch(PDO::FETCH_ASSOC);
+            ))?->fetch(\PDO::FETCH_ASSOC);
 
             if (is_array($row)) {
                 return match ($table) {
@@ -224,8 +221,8 @@ final class GeoService
      * geoname_ids always return an empty array.
      *
      * @return array<string, list<string>> alternate names keyed by ISO language code; unlabeled
-     *                                      names (GeoNames leaves iso_language blank sometimes) are
-     *                                      grouped under the empty string key
+     *                                     names (GeoNames leaves iso_language blank sometimes) are
+     *                                     grouped under the empty string key
      */
     public function alternateNames(int $geonameId, string $countryCode): array
     {
@@ -238,7 +235,7 @@ final class GeoService
         $statement->execute(['geoname_id' => $geonameId]);
 
         $names = [];
-        foreach ($statement->fetchAll(PDO::FETCH_ASSOC) as $row) {
+        foreach ($statement->fetchAll(\PDO::FETCH_ASSOC) as $row) {
             $lang = $row['iso_language'] ?? '';
             $names[$lang][] = $row['alternate_name'];
         }
@@ -254,10 +251,10 @@ final class GeoService
 
         $sharedDirectory = $_SERVER['APP_SHARED_DIRECTORY'] ?? $_ENV['APP_SHARED_DIRECTORY'] ?? null;
         if (is_string($sharedDirectory) && '' !== trim($sharedDirectory)) {
-            return rtrim($sharedDirectory, '/') . '/geonames-data';
+            return rtrim($sharedDirectory, '/').'/geonames-data';
         }
 
-        return $this->projectDir . '/var/geonames-data';
+        return $this->projectDir.'/var/geonames-data';
     }
 
     private function findGeoOnly(string $query): ?GeoRecord
@@ -271,7 +268,7 @@ final class GeoService
             'SELECT target_table, geoname_id FROM alias WHERE alias = :alias LIMIT 1'
         );
         $statement->execute(['alias' => $normalized]);
-        $alias = $statement->fetch(PDO::FETCH_ASSOC);
+        $alias = $statement->fetch(\PDO::FETCH_ASSOC);
 
         if (is_array($alias)) {
             return $this->findByGeoId((int) $alias['geoname_id']);
@@ -281,7 +278,7 @@ final class GeoService
             'SELECT geoname_id, name, iso2 FROM country WHERE lower(name) = :name LIMIT 1'
         );
         $country->execute(['name' => $normalized]);
-        $row = $country->fetch(PDO::FETCH_ASSOC);
+        $row = $country->fetch(\PDO::FETCH_ASSOC);
         if (is_array($row)) {
             return new GeoRecord(
                 geonameId: (int) $row['geoname_id'],
@@ -302,11 +299,11 @@ final class GeoService
         // that bigger city purely on population, which is a wrong-city result, not just a
         // coarser one. Alias matches are still used, but only to break ties among themselves or
         // when there's no direct name match at all.
-        $sql = "SELECT DISTINCT city.geoname_id, city.name, city.ascii_name, city.country_code, city.admin1_code, city.admin2_code, city.feature_code, city.population, city.latitude, city.longitude,
+        $sql = 'SELECT DISTINCT city.geoname_id, city.name, city.ascii_name, city.country_code, city.admin1_code, city.admin2_code, city.feature_code, city.population, city.latitude, city.longitude,
                     CASE WHEN lower(city.name) = :name OR lower(city.ascii_name) = :name THEN 0 ELSE 1 END AS match_rank
                 FROM city
                 LEFT JOIN alias ON alias.geoname_id = city.geoname_id
-                WHERE (lower(city.name) = :name OR lower(city.ascii_name) = :name OR alias.alias = :name)";
+                WHERE (lower(city.name) = :name OR lower(city.ascii_name) = :name OR alias.alias = :name)';
         $params = ['name' => strtolower($city)];
 
         if (null !== $admin1Code) {
@@ -317,7 +314,7 @@ final class GeoService
         $sql .= ' ORDER BY match_rank ASC, city.population DESC, city.geoname_id ASC LIMIT 1';
         $statement = $this->countryConnection($countryCode)->prepare($sql);
         $statement->execute($params);
-        $row = $statement->fetch(PDO::FETCH_ASSOC);
+        $row = $statement->fetch(\PDO::FETCH_ASSOC);
 
         if (!is_array($row)) {
             return null;
@@ -427,25 +424,25 @@ final class GeoService
 
         $statement = $this->geoConnection()->prepare($sql);
         $statement->execute($params);
-        $row = $statement->fetch(PDO::FETCH_ASSOC);
+        $row = $statement->fetch(\PDO::FETCH_ASSOC);
 
         return is_array($row) ? $row : null;
     }
 
-    private function geoConnection(): PDO
+    private function geoConnection(): \PDO
     {
-        return $this->connectionFor($this->sqliteDir() . '/geo.sqlite');
+        return $this->connectionFor($this->sqliteDir().'/geo.sqlite');
     }
 
-    private function countryConnection(string $countryCode): PDO
+    private function countryConnection(string $countryCode): \PDO
     {
-        return $this->connectionFor($this->sqliteDir() . '/' . strtolower($countryCode) . '.sqlite');
+        return $this->connectionFor($this->sqliteDir().'/'.strtolower($countryCode).'.sqlite');
     }
 
-    private function connectionFor(string $path): PDO
+    private function connectionFor(string $path): \PDO
     {
         if (!is_file($path)) {
-            throw new RuntimeException(sprintf('GeoNames SQLite file not found: %s', $path));
+            throw new \RuntimeException(sprintf('GeoNames SQLite file not found: %s', $path));
         }
 
         if (isset($this->connections[$path])) {
@@ -453,12 +450,12 @@ final class GeoService
         }
 
         try {
-            $pdo = new PDO('sqlite:' . $path);
-            $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+            $pdo = new \PDO('sqlite:'.$path);
+            $pdo->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
 
             return $this->connections[$path] = $pdo;
-        } catch (PDOException $exception) {
-            throw new RuntimeException(sprintf('Unable to open SQLite database %s', $path), 0, $exception);
+        } catch (\PDOException $exception) {
+            throw new \RuntimeException(sprintf('Unable to open SQLite database %s', $path), 0, $exception);
         }
     }
 }
